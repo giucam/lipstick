@@ -19,7 +19,7 @@
 #include <QQuickWindow>
 #include "lipstickglobal.h"
 #include <QQmlParserStatus>
-#include <QWaylandCompositor>
+#include <QWaylandQuickCompositor>
 #include <QWaylandSurfaceItem>
 #include <QPointer>
 #include <QSettings>
@@ -30,7 +30,7 @@ class LipstickCompositorWindow;
 class LipstickCompositorProcWindow;
 class QOrientationSensor;
 
-class LIPSTICK_EXPORT LipstickCompositor : public QQuickWindow, public QWaylandCompositor,
+class LIPSTICK_EXPORT LipstickCompositor : public QQuickWindow, public QWaylandQuickCompositor,
                                            public QQmlParserStatus
 {
     Q_OBJECT
@@ -58,7 +58,7 @@ public:
     virtual void classBegin();
     virtual void componentComplete();
     virtual void surfaceCreated(QWaylandSurface *surface);
-    virtual void openUrl(WaylandClient *client, const QUrl &url);
+    virtual bool openUrl(WaylandClient *client, const QUrl &url);
     virtual void retainedSelectionReceived(QMimeData *mimeData);
 
     int windowCount() const;
@@ -98,6 +98,7 @@ public:
     QWaylandSurface *surfaceForId(int) const;
 
     void setUpdatesEnabled(bool enabled);
+    QWaylandSurfaceView *createView(QWaylandSurface *surf) Q_DECL_OVERRIDE;
 
 signals:
     void windowAdded(QObject *window);
@@ -125,9 +126,6 @@ signals:
     void displayAboutToBeOn();
     void displayAboutToBeOff();
 
-protected:
-    virtual void surfaceAboutToBeDestroyed(QWaylandSurface *surface);
-
 private slots:
     void surfaceMapped();
     void surfaceUnmapped();
@@ -149,7 +147,7 @@ private slots:
     void setScreenOrientationFromSensor();
     void clipboardDataChanged();
     void onVisibleChanged(bool visible);
-    void startFrame();
+    void onSurfaceDieing();
 
 private:
     friend class LipstickCompositorWindow;
@@ -173,6 +171,7 @@ private:
 
     int m_totalWindowCount;
     QHash<int, LipstickCompositorWindow *> m_mappedSurfaces;
+    QHash<int, LipstickCompositorWindow *> m_windows;
 
     int m_nextWindowId;
     QList<WindowModel *> m_windowModels;

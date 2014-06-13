@@ -34,11 +34,12 @@
 LipstickCompositor *LipstickCompositor::m_instance = 0;
 
 LipstickCompositor::LipstickCompositor()
-: QWaylandCompositor(this), m_totalWindowCount(0), m_nextWindowId(1), m_homeActive(true), m_shaderEffect(0),
+: QWaylandQuickCompositor(this), m_totalWindowCount(0), m_nextWindowId(1), m_homeActive(true), m_shaderEffect(0),
   m_fullscreenSurface(0), m_directRenderingActive(false), m_topmostWindowId(0), m_screenOrientation(Qt::PrimaryOrientation), m_sensorOrientation(Qt::PrimaryOrientation), m_displayState(new MeeGo::QmDisplayState(this)), m_retainedSelection(0), m_compositorSettings("nemomobile", "lipstick"), m_previousDisplayState(m_displayState->get()), m_updatesEnabled(true), m_onUpdatesDisabledUnfocusedWindowId(0)
 {
     setColor(Qt::black);
     setRetainedSelectionEnabled(true);
+    addDefaultShell();
 
     if (m_instance) qFatal("LipstickCompositor: Only one compositor instance per process is supported");
     m_instance = this;
@@ -47,7 +48,6 @@ LipstickCompositor::LipstickCompositor()
     QObject::connect(this, SIGNAL(afterRendering()), this, SLOT(windowSwapped()));
     connect(m_displayState, SIGNAL(displayStateChanged(MeeGo::QmDisplayState::DisplayState)), this, SLOT(reactOnDisplayStateChanges(MeeGo::QmDisplayState::DisplayState)));
     QObject::connect(HomeApplication::instance(), SIGNAL(aboutToDestroy()), this, SLOT(homeApplicationAboutToDestroy()));
-    connect(this, &QQuickWindow::beforeSynchronizing, this, &LipstickCompositor::startFrame, Qt::DirectConnection);
 
     m_orientationSensor = new QOrientationSensor(this);
     QObject::connect(m_orientationSensor, SIGNAL(readingChanged()), this, SLOT(setScreenOrientationFromSensor()));
@@ -132,10 +132,10 @@ void LipstickCompositor::surfaceCreated(QWaylandSurface *surface)
 #endif
 }
 
-void LipstickCompositor::openUrl(WaylandClient *client, const QUrl &url)
+bool LipstickCompositor::openUrl(WaylandClient *client, const QUrl &url)
 {
     Q_UNUSED(client)
-    openUrl(url);
+    return openUrl(url);
 }
 
 bool LipstickCompositor::openUrl(const QUrl &url)
@@ -205,27 +205,27 @@ bool LipstickCompositor::debug() const
 
 QObject *LipstickCompositor::windowForId(int id) const
 {
-    LipstickCompositorWindow *window = m_mappedSurfaces.value(id, 0);
+    LipstickCompositorWindow *window = m_windows.value(id, 0);
     return window;
 }
 
 void LipstickCompositor::closeClientForWindowId(int id)
 {
-    LipstickCompositorWindow *window = m_mappedSurfaces.value(id, 0);
+    LipstickCompositorWindow *window = m_windows.value(id, 0);
     if (window && window->surface())
         destroyClientForSurface(window->surface());
 }
 
 QWaylandSurface *LipstickCompositor::surfaceForId(int id) const
 {
-    LipstickCompositorWindow *window = m_mappedSurfaces.value(id, 0);
+    LipstickCompositorWindow *window = m_windows.value(id, 0);
     return window?window->surface():0;
 }
 
 int LipstickCompositor::windowIdForLink(QWaylandSurface *s, uint link) const
 {
-    for (QHash<int, LipstickCompositorWindow *>::ConstIterator iter = m_mappedSurfaces.begin();
-         iter != m_mappedSurfaces.end(); ++iter) {
+    for (QHash<int, LipstickCompositorWindow *>::ConstIterator iter = m_windows.begin();
+         iter != m_windows.end(); ++iter) {
 
         QWaylandSurface *windowSurface = iter.value()->surface();
 
@@ -270,8 +270,10 @@ void LipstickCompositor::setFullscreenSurface(QWaylandSurface *surface)
         return;
 
     // Prevent flicker when returning to composited mode
-    if (!surface && m_fullscreenSurface && m_fullscreenSurface->surfaceItem())
-        m_fullscreenSurface->surfaceItem()->update();
+    if (!surface && m_fullscreenSurface) {
+        foreach (QWaylandSurfaceView *view, m_fullscreenSurface->views())
+            static_cast<QWaylandSurfaceItem *>(view)->update();
+    }
 
     m_fullscreenSurface = surface;
 
@@ -291,11 +293,28 @@ void LipstickCompositor::setTopmostWindowId(int id)
     }
 }
 
-void LipstickCompositor::surfaceAboutToBeDestroyed(QWaylandSurface *surface)
+QWaylandSurfaceView *LipstickCompositor::createView(QWaylandSurface *surface)
 {
+    QVariantMap properties = surface->windowProperties();
+    QString category = properties.value("CATEGORY").toString();
+
+    int id = m_nextWindowId++;
+    LipstickCompositorWindow *item = new LipstickCompositorWindow(id, category, static_cast<QWaylandQuickSurface *>(surface));
+    QObject::connect(item, SIGNAL(destroyed(QObject*)), this, SLOT(windowDestroyed()));
+    m_windows.insert(item->windowId(), item);
+    return item;
+}
+
+static LipstickCompositorWindow *surfaceWindow(QWaylandSurface *surface)
+{
+    return surface->views().isEmpty() ? 0 : static_cast<LipstickCompositorWindow *>(surface->views().first());
+}
+
+void LipstickCompositor::onSurfaceDieing()
+{
+    QWaylandSurface *surface = static_cast<QWaylandSurface *>(sender());
     Q_ASSERT(surface);
-    LipstickCompositorWindow *item = static_cast<LipstickCompositorWindow *>(surface->surfaceItem());
-    surface->setSurfaceItem(0);
+    LipstickCompositorWindow *item = surfaceWindow(surface);
 
     if (surface == m_fullscreenSurface)
         setFullscreenSurface(0);
@@ -305,6 +324,7 @@ void LipstickCompositor::surfaceAboutToBeDestroyed(QWaylandSurface *surface)
 
         int gc = ghostWindowCount();
         m_mappedSurfaces.remove(item->windowId());
+        m_windows.remove(item->windowId());
 
         emit windowCountChanged();
         emit windowRemoved(item);
@@ -324,30 +344,32 @@ void LipstickCompositor::surfaceAboutToBeDestroyed(QWaylandSurface *surface)
 void LipstickCompositor::surfaceMapped()
 {
     QWaylandSurface *surface = qobject_cast<QWaylandSurface *>(sender());
-    //Ignore surface if it's not a window surface
-    if (!surface->hasShellSurface())
+
+    LipstickCompositorWindow *item = surfaceWindow(surface);
+    if (!item)
+        item = static_cast<LipstickCompositorWindow *>(createView(surface));
+
+    // The surface was mapped for the first time
+    if (item->m_mapped)
         return;
 
     QVariantMap properties = surface->windowProperties();
-    QString category = properties.value("CATEGORY").toString();
 
-    if (surface->surfaceItem())
-        return;
+    item->m_mapped = true;
+    item->m_category = properties.value("CATEGORY").toString();
+    item->setParentItem(contentItem());
 
-    // The surface was mapped for the first time
-    int id = m_nextWindowId++;
-    LipstickCompositorWindow *item = new LipstickCompositorWindow(id, category, surface, contentItem());
     item->setSize(surface->size());
-    QObject::connect(item, SIGNAL(destroyed(QObject*)), this, SLOT(windowDestroyed()));
+    QObject::connect(surface, &QWaylandSurface::surfaceDestroyed, this, &LipstickCompositor::onSurfaceDieing);
     m_totalWindowCount++;
-    m_mappedSurfaces.insert(id, item);
+    m_mappedSurfaces.insert(item->windowId(), item);
 
     item->setTouchEventsEnabled(true);
 
     emit windowCountChanged();
     emit windowAdded(item);
 
-    windowAdded(id);
+    windowAdded(item->windowId());
 
     emit availableWinIdsChanged();
 }
@@ -361,7 +383,7 @@ void LipstickCompositor::surfaceSizeChanged()
 {
     QWaylandSurface *surface = qobject_cast<QWaylandSurface *>(sender());
 
-    LipstickCompositorWindow *window = static_cast<LipstickCompositorWindow *>(surface->surfaceItem());
+    LipstickCompositorWindow *window = surfaceWindow(surface);
     if (window)
         window->setSize(surface->size());
 }
@@ -369,7 +391,7 @@ void LipstickCompositor::surfaceSizeChanged()
 void LipstickCompositor::surfaceTitleChanged()
 {
     QWaylandSurface *surface = qobject_cast<QWaylandSurface *>(sender());
-    LipstickCompositorWindow *window = static_cast<LipstickCompositorWindow *>(surface->surfaceItem());
+    LipstickCompositorWindow *window = surfaceWindow(surface);
 
     if (window) {
         emit window->titleChanged();
@@ -384,7 +406,7 @@ void LipstickCompositor::surfaceTitleChanged()
 void LipstickCompositor::surfaceRaised()
 {
     QWaylandSurface *surface = qobject_cast<QWaylandSurface *>(sender());
-    LipstickCompositorWindow *window = static_cast<LipstickCompositorWindow *>(surface->surfaceItem());
+    LipstickCompositorWindow *window = surfaceWindow(surface);
 
     if (window) {
         emit windowRaised(window);
@@ -394,18 +416,11 @@ void LipstickCompositor::surfaceRaised()
 void LipstickCompositor::surfaceLowered()
 {
     QWaylandSurface *surface = qobject_cast<QWaylandSurface *>(sender());
-    LipstickCompositorWindow *window = static_cast<LipstickCompositorWindow *>(surface->surfaceItem());
+    LipstickCompositorWindow *window = surfaceWindow(surface);
 
     if (window) {
         emit windowLowered(window);
     }
-}
-
-void LipstickCompositor::startFrame()
-{
-#if QT_VERSION >= QT_VERSION_CHECK(5,2,0)
-    frameStarted();
-#endif
 }
 
 void LipstickCompositor::windowSwapped()
@@ -420,6 +435,7 @@ void LipstickCompositor::windowSwapped()
 void LipstickCompositor::windowDestroyed()
 {
     m_totalWindowCount--;
+    m_windows.remove(static_cast<LipstickCompositorWindow *>(sender())->windowId());
     emit ghostWindowCountChanged();
 }
 
@@ -431,11 +447,11 @@ void LipstickCompositor::windowPropertyChanged(const QString &property)
         qDebug() << "Window properties changed:" << surface << surface->windowProperties();
 
     if (property == QLatin1String("MOUSE_REGION")) {
-        LipstickCompositorWindow *window = static_cast<LipstickCompositorWindow *>(surface->surfaceItem());
+        LipstickCompositorWindow *window = surfaceWindow(surface);
         if (window)
             window->refreshMouseRegion();
     } else if (property == QLatin1String("GRABBED_KEYS")) {
-        LipstickCompositorWindow *window = static_cast<LipstickCompositorWindow *>(surface->surfaceItem());
+        LipstickCompositorWindow *window = surfaceWindow(surface);
         if (window)
             window->refreshGrabbedKeys();
     }
@@ -446,7 +462,7 @@ void LipstickCompositor::surfaceUnmapped(QWaylandSurface *surface)
     if (surface == m_fullscreenSurface)
         setFullscreenSurface(0);
 
-    LipstickCompositorWindow *window = static_cast<LipstickCompositorWindow *>(surface->surfaceItem());
+    LipstickCompositorWindow *window = surfaceWindow(surface);
     if (window)
         emit windowHidden(window);
 }

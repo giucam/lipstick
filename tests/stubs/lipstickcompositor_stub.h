@@ -15,7 +15,7 @@ class LipstickCompositorStub : public StubBase {
   virtual void classBegin();
   virtual void componentComplete();
   virtual void surfaceCreated(QWaylandSurface *surface);
-  virtual void openUrl(WaylandClient *, const QUrl &);
+  virtual bool openUrl(WaylandClient *, const QUrl &);
   virtual bool openUrl(const QUrl &);
   virtual void retainedSelectionReceived(QMimeData *mimeData);
   virtual int windowCount() const;
@@ -33,7 +33,6 @@ class LipstickCompositorStub : public StubBase {
   virtual void setDisplayOff();
   virtual LipstickCompositorProcWindow * mapProcWindow(const QString &title, const QString &category, const QRect &);
   virtual QWaylandSurface * surfaceForId(int) const;
-  virtual void surfaceAboutToBeDestroyed(QWaylandSurface *surface);
   virtual void surfaceMapped();
   virtual void surfaceUnmapped();
   virtual void surfaceSizeChanged();
@@ -52,7 +51,8 @@ class LipstickCompositorStub : public StubBase {
   virtual void setScreenOrientationFromSensor();
   virtual void clipboardDataChanged();
   virtual void onVisibleChanged(bool visible);
-  virtual void startFrame();
+  virtual QWaylandSurfaceView *createView(QWaylandSurface *surf);
+  virtual void onSurfaceDieing();
 }; 
 
 // 2. IMPLEMENT STUB
@@ -81,11 +81,12 @@ void LipstickCompositorStub::surfaceCreated(QWaylandSurface *surface) {
   stubMethodEntered("surfaceCreated",params);
 }
 
-void LipstickCompositorStub::openUrl(WaylandClient *client, const QUrl &url) {
+bool LipstickCompositorStub::openUrl(WaylandClient *client, const QUrl &url) {
     QList<ParameterBase*> params;
     params.append( new Parameter<WaylandClient * >(client));
     params.append( new Parameter<const QUrl &>(url));
     stubMethodEntered("openUrl",params);
+    return stubReturnValue<bool>("openUrl");
 }
 
 bool LipstickCompositorStub::openUrl(const QUrl &url) {
@@ -187,12 +188,6 @@ QWaylandSurface * LipstickCompositorStub::surfaceForId(int id) const {
   return stubReturnValue<QWaylandSurface *>("surfaceForId");
 }
 
-void LipstickCompositorStub::surfaceAboutToBeDestroyed(QWaylandSurface *surface) {
-  QList<ParameterBase*> params;
-  params.append( new Parameter<QWaylandSurface * >(surface));
-  stubMethodEntered("surfaceAboutToBeDestroyed",params);
-}
-
 void LipstickCompositorStub::surfaceMapped() {
   stubMethodEntered("surfaceMapped");
 }
@@ -215,6 +210,10 @@ void LipstickCompositorStub::surfaceRaised() {
 
 void LipstickCompositorStub::surfaceLowered() {
   stubMethodEntered("surfaceLowered");
+}
+
+void LipstickCompositorStub::onSurfaceDieing() {
+    stubMethodEntered("onSurfaceDieing");
 }
 
 #if QT_VERSION >= QT_VERSION_CHECK(5, 2, 0)
@@ -265,8 +264,12 @@ void LipstickCompositorStub::onVisibleChanged(bool v) {
     stubMethodEntered("onVisibleChanged", params);
 }
 
-void LipstickCompositorStub::startFrame() {
-    stubMethodEntered("startFrame");
+QWaylandSurfaceView *LipstickCompositorStub::createView(QWaylandSurface *surf)
+{
+    QList<ParameterBase*> params;
+    params.append( new Parameter<QWaylandSurface *>(surf));
+    stubMethodEntered("createView", params);
+    return stubReturnValue<QWaylandSurfaceView *>("createView");
 }
 
 // 3. CREATE A STUB INSTANCE
@@ -299,8 +302,8 @@ void LipstickCompositor::surfaceCreated(QWaylandSurface *surface) {
   gLipstickCompositorStub->surfaceCreated(surface);
 }
 
-void LipstickCompositor::openUrl(WaylandClient *client, const QUrl &url) {
-  gLipstickCompositorStub->openUrl(client, url);
+bool LipstickCompositor::openUrl(WaylandClient *client, const QUrl &url) {
+  return gLipstickCompositorStub->openUrl(client, url);
 }
 
 bool LipstickCompositor::openUrl(const QUrl &url) {
@@ -372,10 +375,6 @@ QWaylandSurface * LipstickCompositor::surfaceForId(int id) const {
   return gLipstickCompositorStub->surfaceForId(id);
 }
 
-void LipstickCompositor::surfaceAboutToBeDestroyed(QWaylandSurface *surface) {
-  gLipstickCompositorStub->surfaceAboutToBeDestroyed(surface);
-}
-
 void LipstickCompositor::surfaceMapped() {
   gLipstickCompositorStub->surfaceMapped();
 }
@@ -441,8 +440,12 @@ void LipstickCompositor::onVisibleChanged(bool v) {
   gLipstickCompositorStub->onVisibleChanged(v);
 }
 
-void LipstickCompositor::startFrame() {
-    gLipstickCompositorStub->startFrame();
+QWaylandSurfaceView *LipstickCompositor::createView(QWaylandSurface *surf) {
+  return gLipstickCompositorStub->createView(surf);
+}
+
+void LipstickCompositor::onSurfaceDieing() {
+    gLipstickCompositorStub->onSurfaceDieing();
 }
 
 #if QT_VERSION < QT_VERSION_CHECK(5, 2, 0)

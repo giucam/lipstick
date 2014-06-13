@@ -312,8 +312,10 @@ void WindowPixmapItem::setWindowId(int id)
         return;
     
     if (m_item) {
-        if (m_item->surface())
+        if (m_item->surface()) {
             disconnect(m_item->surface(), SIGNAL(sizeChanged()), this, SIGNAL(windowSizeChanged()));
+            disconnect(m_item.data(), &QWaylandSurfaceItem::surfaceDestroyed, this, &WindowPixmapItem::surfaceDestroyed);
+        }
         m_item->imageRelease();
         m_item = 0;
     }
@@ -322,6 +324,11 @@ void WindowPixmapItem::setWindowId(int id)
     updateItem();
 
     emit windowIdChanged();
+}
+
+void WindowPixmapItem::surfaceDestroyed()
+{
+    delete this;
 }
 
 bool WindowPixmapItem::opaque() const
@@ -450,6 +457,7 @@ void WindowPixmapItem::updateItem()
             m_item = w;
             delete m_shaderEffect; m_shaderEffect = 0;
             connect(m_item->surface(), SIGNAL(sizeChanged()), this, SIGNAL(windowSizeChanged()));
+            connect(m_item.data(), &QWaylandSurfaceItem::surfaceDestroyed, this, &WindowPixmapItem::surfaceDestroyed);
         } else {
             if (!m_shaderEffect) {
                 m_shaderEffect = static_cast<QQuickItem *>(c->shaderEffectComponent()->create());
