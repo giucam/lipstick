@@ -19,11 +19,14 @@
 #include <QWaylandSurfaceItem>
 #include "lipstickglobal.h"
 
+class WindowProperty;
+
 class LIPSTICK_EXPORT LipstickCompositorWindow : public QWaylandSurfaceItem
 {
     Q_OBJECT
 
     Q_PROPERTY(int windowId READ windowId CONSTANT)
+    Q_PROPERTY(int coverId READ coverId NOTIFY coverIdChanged)
     Q_PROPERTY(bool isInProcess READ isInProcess CONSTANT)
 
     Q_PROPERTY(bool delayRemove READ delayRemove WRITE setDelayRemove NOTIFY delayRemoveChanged)
@@ -37,12 +40,14 @@ class LIPSTICK_EXPORT LipstickCompositorWindow : public QWaylandSurfaceItem
 
 public:
     LipstickCompositorWindow(int windowId, const QString &, QWaylandQuickSurface *surface, QQuickItem *parent = 0);
+    ~LipstickCompositorWindow();
 
     QVariant userData() const;
     void setUserData(QVariant);
 
     int windowId() const;
     qint64 processId() const;
+    int coverId() const;
 
     bool delayRemove() const;
     void setDelayRemove(bool);
@@ -70,6 +75,7 @@ signals:
     void titleChanged();
     void delayRemoveChanged();
     void mouseRegionBoundsChanged();
+    void coverIdChanged();
 
 private slots:
     void handleTouchCancel();
@@ -101,6 +107,7 @@ private:
     QList<int> m_grabbedKeys;
     QList<QMetaObject::Connection> m_surfaceConnections;
     bool m_mapped;
+    WindowProperty *m_windowProperty;
 };
 
 #endif // LIPSTICKCOMPOSITORWINDOW_H

@@ -21,12 +21,15 @@
 #include <signal.h>
 #include "lipstickcompositor.h"
 #include "lipstickcompositorwindow.h"
+#include "windowproperty.h"
+
+#include "sailfishshell/sailfishsurface.h"
 
 LipstickCompositorWindow::LipstickCompositorWindow(int windowId, const QString &category,
                                                    QWaylandQuickSurface *surface, QQuickItem *parent)
 : QWaylandSurfaceItem(surface, parent), m_windowId(windowId), m_category(category), m_ref(0),
   m_delayRemove(false), m_windowClosed(false), m_removePosted(false), m_mouseRegionValid(false),
-  m_interceptingTouch(false), m_mapped(false)
+  m_interceptingTouch(false), m_mapped(false), m_windowProperty(0)
 {
     setFlags(QQuickItem::ItemIsFocusScope | flags());
     refreshMouseRegion();
@@ -38,6 +41,11 @@ LipstickCompositorWindow::LipstickCompositorWindow(int windowId, const QString &
     connect(this, &QWaylandSurfaceItem::surfaceDestroyed, this, &QObject::deleteLater);
 
     connectSurfaceSignals();
+}
+
+LipstickCompositorWindow::~LipstickCompositorWindow()
+{
+    delete m_windowProperty;
 }
 
 QVariant LipstickCompositorWindow::userData() const
@@ -57,6 +65,34 @@ void LipstickCompositorWindow::setUserData(QVariant data)
 int LipstickCompositorWindow::windowId() const
 {
     return m_windowId;
+}
+
+int LipstickCompositorWindow::coverId() const
+{
+    LipstickCompositorWindow *that = const_cast<LipstickCompositorWindow *>(this);
+    foreach (QWaylandSurfaceInterface *iface, surface()->interfaces()) {
+        if (SailfishSurface *ss = dynamic_cast<SailfishSurface *>(iface)) {
+            if (!ss->window())
+                continue;
+            connect(ss->window(), &SailfishWindow::coverChanged, that, &LipstickCompositorWindow::coverIdChanged);
+            QWaylandSurface *cover = ss->window()->cover();
+            if (!cover) {
+                return 0;
+            }
+            if (cover->views().isEmpty()) {
+                LipstickCompositor::instance()->createView(cover);
+            }
+            return static_cast<LipstickCompositorWindow *>(cover->views().first())->windowId();
+        }
+    }
+
+    if (!m_windowProperty) {
+        that->m_windowProperty = new WindowProperty;
+        connect(m_windowProperty, &WindowProperty::valueChanged, that, &LipstickCompositorWindow::coverIdChanged);
+        m_windowProperty->setWindowId(windowId());
+        m_windowProperty->setProperty("SAILFISH_COVER_WINDOW");
+    }
+    return m_windowProperty->value().toInt();
 }
 
 qint64 LipstickCompositorWindow::processId() const
@@ -83,6 +119,16 @@ void LipstickCompositorWindow::setDelayRemove(bool delay)
 
 QString LipstickCompositorWindow::category() const
 {
+    if (!surface()) {
+        return m_category;
+    }
+
+    foreach (QWaylandSurfaceInterface *iface, surface()->interfaces()) {
+        if (SailfishSurface *ss = dynamic_cast<SailfishSurface *>(iface)) {
+            if (ss->window() && ss->window()->surface() != surface())
+                return "cover";
+        }
+    }
     return m_category;
 }
 

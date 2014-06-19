@@ -11,7 +11,7 @@ VERSION = 0.25.3
 DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x000000
 DEFINES += LIPSTICK_BUILD_LIBRARY VERSION=\\\"$$VERSION\\\"
 
-CONFIG += qt
+CONFIG += qt wayland-scanner
 INSTALLS = target ts_install engineering_english_install
 target.path = $$[QT_INSTALL_LIBS]
 
@@ -22,6 +22,7 @@ MOC_DIR = .moc
 INCLUDEPATH += utilities components xtools
 
 include(compositor/compositor.pri)
+include(compositor/sailfishshell/sailfishshell.pri)
 
 PUBLICHEADERS += \
     utilities/qobjectlistmodel.h \

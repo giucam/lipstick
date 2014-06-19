@@ -1,0 +1,254 @@
+<protocol name="sailfish_shell">
+    <copyright>
+        Copyright (C) 2014 Jolla Ltd.
+
+        This file is part of lipstick.
+
+        This library is free software; you can redistribute it and/or
+        modify it under the terms of the GNU Lesser General Public
+        License version 2.1 as published by the Free Software Foundation
+        and appearing in the file LICENSE.LGPL included in the packaging
+        of this file.
+    </copyright>
+
+    <interface name="sailfish_shell" version="1">
+        <description summary="metadata information for sailfish applications">
+            This is a global interface providing means to integrate basic
+            surfaces with the sailfish shell.
+        </description>
+
+        <request name="destroy" type="destructor">
+            <description summary="destroy the sailfish_shell object">
+                Destroy this sailfish_shell object. All its sailfish_surface and
+                sailfish_window children are destroyed by the server automatically.
+            </description>
+        </request>
+
+        <request name="get_sailfish_surface">
+            <description summary="create a new sailfish_surface">
+                Extends 'surface' with the sailfish_surface role.
+                A sailfish_surface is not mapped on screen until it is used
+                in a sailfish_window as the main and/or cover surface.
+
+                If the wl_surface already has a role a protocol error will
+                be raised.
+            </description>
+            <arg name="id" type="new_id" interface="sailfish_surface"/>
+            <arg name="surface" type="object" interface="wl_surface"/>
+        </request>
+        <request name="get_sailfish_window">
+            <description summary="create a new sailfish_window">
+                Create a sailfish_window using 'surface' as its main surface.
+                The window will use the same surface as its cover surface by
+                default until that is manually changed by calling the
+                set_cover_surface request.
+
+                A sailfish_surface can be owned by one sailfish_window only,
+                the server will raise a protocol error otherwise.
+            </description>
+            <arg name="id" type="new_id" interface="sailfish_window"/>
+            <arg name="surface" type="object" interface="sailfish_surface"/>
+        </request>
+
+        <request name="pong">
+            <description summary="respond to a ping event">
+                A client must respond to a ping event with a pong request or
+                the client may be deemed unresponsive.
+            </description>
+            <arg name="serial" type="uint"/>
+        </request>
+
+        <event name="ping">
+            <description summary="ping client">
+                Ping a client to check if it is receiving events and sending
+                requests. A client is expected to reply with a pong request.
+            </description>
+            <arg name="serial" type="uint"/>
+        </event>
+
+        <enum name="application_state">
+            <description summary="TODO">
+            </description>
+            <entry name="suspended" value="0"/>
+            <entry name="hidden" value="1"/>
+            <entry name="inactive" value="2"/>
+            <entry name="active" value="4" summary="The application is visible and in front."/>
+        </enum>
+
+        <event name="update_state">
+            <description summary="TODO">
+            </description>
+            <arg name="state" type="uint"/>
+        </event>
+
+        <event name="close">
+            <description summary="request the client to close">
+                A client should react to the close event by destroying its
+                objects and quitting. If it ignores the event or if the tear down
+                takes too much time a client may be forcefully killed by the server.
+            </description>
+        </event>
+
+    </interface>
+
+    <interface name="sailfish_surface" version="1">
+        <description summary="sailfish-style surface metadata interface">
+            This interface provides a basic wl_surface with requests and events
+            to integrate in a sailfish shell.
+
+            Server side, a sailfish_surface is automatically destroyed if the
+            wl_surface is destroyed. A client should call sailfish_surface.destroy()
+            before calling wl_surface.destroy().
+        </description>
+
+        <request name="destroy" type="destructor">
+            <description summary="delete surface">
+                Deletes the surface and invalidates its object ID.
+
+                The wl_surface associated with this sailfish_surface loses its role,
+                and all the properties associated with it.
+            </description>
+        </request>
+
+        <enum name="state">
+            <description summary="types of state on the surface">
+                The different state values used on the surface. They are paired with
+                the configure event to ensure that both the client and the compositor
+                setting the state can be synchronized.
+
+                States set in this way are double-buffered. They will get applied on
+                the next commit.
+            </description>
+            <entry name="hidden" value="1" summary="the surface is not visible">
+                The surface is hidden, it should stop drawing and free memory
+                if possible.
+            </entry>
+        </enum>
+
+        <event name="configure">
+            <description summary="suggest a surface change">
+                The configure event asks the client to resize its surface.
+
+                The width and height arguments specify a hint to the window
+                about how its surface should be resized in surface local
+                coordinates. The states listed in the event specify additional
+                information about the surface.
+
+                A client should send an ack_configure request with the serial
+                sent in this configure event before attaching a new buffer.
+
+                If the client receives multiple configure events before it
+                can respond to one, it is free to discard all but the last
+                event it received.
+            </description>
+            <arg name="width" type="uint"/>
+            <arg name="height" type="uint"/>
+            <arg name="states" type="array"/>
+            <arg name="serial" type="uint"/>
+        </event>
+
+        <request name="ack_configure">
+            <description summary="ack a configure event">
+                When a configure event is received, a client should then ack it
+                using the ack_configure request to ensure that the compositor
+                knows the client has seen the event.
+
+                By this point, the state is confirmed, and the next attach should
+                contain the buffer drawn for the configure event you are acking.
+            </description>
+            <arg name="serial" type="uint"/>
+        </request>
+
+        <request name="request_state">
+            <description summary="request a surface change">
+                Ask the compositor to send a configure event with the
+                requested states. A client should not make any assumption on
+                the effects of the request, the compositor is free to ignore it
+                or to send a different states array than the one requested.
+            </description>
+            <arg name="states" type="array"/>
+        </request>
+    </interface>
+
+    <interface name="sailfish_window" version="1">
+        <description summary="top level window interface">
+            This interface is used to map a surface to screen.
+            A sailfish_window manages up to two surfaces, one as the main surface
+            and one as the cover surface. The cover surface can either be the main
+            surface or a dedicated one.
+
+            This interface is automatically destroyed by the server if its main
+            surface is detroyed. Destroying its cover surface will have the same
+            effect as calling set_cover_surface(null), if it is dedicated.
+        </description>
+
+        <request name="destroy" type="destructor">
+            <description summary="delete the window">
+                Deletes the window and invalidates its object ID.
+
+                Any property associated with this sailfish_window is lost, its main
+                and cover surfaces are unmapped.
+            </description>
+        </request>
+
+        <request name="set_title">
+            <description summary="set window title">
+                Set a short title for the window.
+
+                This string may be used to identify the window in a task bar,
+                window list, or other user interface elements provided by the
+                compositor.
+
+                The string must be encoded in UTF-8.
+            </description>
+            <arg name="title" type="string"/>
+        </request>
+
+        <request name="set_app_id">
+            <description summary="set window id">
+                Set an id for the window.
+
+                The app id identifies the general class of applications to which
+                the window belongs.
+
+                It should be the ID that appears in the new desktop entry
+                specification, the interface name.
+            </description>
+            <arg name="app_id" type="string"/>
+        </request>
+
+        <request name="set_transform_mask">
+            <description summary="notify of the transforms this window supports">
+                A window can use this request to notify the compositor of the transforms
+                it supports. By default the compositor assumes the client supports all of them.
+                The accepted values for the transform parameter are the values for
+                wl_output.transform.
+            </description>
+            <arg name="transform" type="uint"/>
+        </request>
+
+        <request name="set_cover_surface">
+            <description summary="set the cover surface for this window">
+                A window will use its main surface as its cover by default until
+                this request is called with a different surface. Calling this
+                results in 'cover' to be used as the cover for this window instead.
+                If 'cover' is null a placeholder cover will be drawn by the compositor.
+                It is legal to pass the main surface of this window to have it used as
+                the cover for it.
+            </description>
+            <arg name="cover" type="object" interface="sailfish_surface" allow-null="true"/>
+        </request>
+
+        <event name="close">
+            <description summary="request to close this window">
+                This event requests the client to destroy this window. The client is
+                free to choose if it wants to quit or to just destroy this window and
+                keep running, however if the client ignores the request or takes too
+                much time to destroy the window the server may decide to forcefully
+                kill it.
+            </description>
+        </event>
+
+        <!-- cover actions stuff here -->
+    </interface>
+</protocol>
