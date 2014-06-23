@@ -31,6 +31,7 @@
 #include "lipsticksettings.h"
 #include <qpa/qwindowsysteminterface.h>
 #include "sailfishshell/sailfishshell.h"
+#include "alienmanager/alienmanager.h"
 
 LipstickCompositor *LipstickCompositor::m_instance = 0;
 
@@ -77,6 +78,7 @@ LipstickCompositor::LipstickCompositor()
     }
 
     addGlobalInterface(new SailfishShellGlobal);
+    addGlobalInterface(new AlienManagerGlobal);
 }
 
 LipstickCompositor::~LipstickCompositor()

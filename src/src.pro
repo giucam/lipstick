@@ -23,6 +23,7 @@ INCLUDEPATH += utilities components xtools
 
 include(compositor/compositor.pri)
 include(compositor/sailfishshell/sailfishshell.pri)
+include(compositor/alienmanager/alienmanager.pri)
 
 PUBLICHEADERS += \
     utilities/qobjectlistmodel.h \
