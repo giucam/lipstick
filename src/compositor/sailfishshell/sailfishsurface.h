@@ -17,8 +17,8 @@
 #define SAILFISHSURFACE_H
 
 #include <QtCompositor/QWaylandSurface>
-#include <QtCompositor/QWaylandSurfaceInterface>
 
+#include "lipsticksurfaceinterface.h"
 #include "qwayland-server-sailfish-shell.h"
 
 class SailfishShell;
@@ -26,7 +26,6 @@ class SailfishWindow;
 
 class SailfishSurface : public QObject, public QWaylandSurfaceInterface, public QtWaylandServer::sailfish_surface
 {
-    Q_OBJECT
 public:
     SailfishSurface(SailfishShell *shell, QWaylandSurface *surface, uint32_t id);
     ~SailfishSurface();
@@ -56,21 +55,17 @@ private:
     friend class SailfishWindow;
 };
 
-class SailfishWindow : public QObject, public QtWaylandServer::sailfish_window
+class SailfishWindow : public LipstickSurfaceInterface, public QtWaylandServer::sailfish_window
 {
-    Q_OBJECT
 public:
     SailfishWindow(SailfishSurface *surface, uint32_t id);
     ~SailfishWindow();
 
     QWaylandSurface *surface() const;
-    QWaylandSurface *cover() const;
-    void setCover(SailfishSurface *surf);
-
-signals:
-    void coverChanged();
 
 protected:
+    bool runOperation(QWaylandSurfaceOp *op) Q_DECL_OVERRIDE;
+
     void sailfish_window_destroy_resource(Resource *resource) Q_DECL_OVERRIDE;
     void sailfish_window_set_title(Resource *resource, const QString &title) Q_DECL_OVERRIDE;
     void sailfish_window_set_app_id(Resource *resource, const QString &app_id) Q_DECL_OVERRIDE;
@@ -79,7 +74,6 @@ protected:
 
 private:
     SailfishSurface *m_surface;
-    SailfishSurface *m_cover;
     bool m_deleting;
 };
 

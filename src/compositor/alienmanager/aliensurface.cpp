@@ -20,7 +20,7 @@
 #include "alienmanager.h"
 
 AlienSurface::AlienSurface(AlienClient *client, QWaylandSurface *surface, uint32_t id)
-            : QWaylandSurfaceInterface(surface)
+            : LipstickSurfaceInterface(surface)
             , QtWaylandServer::alien_surface(static_cast<wl_client*>(surface->client()), id)
             , m_client(client)
             , m_hidden(false)

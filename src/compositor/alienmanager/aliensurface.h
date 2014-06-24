@@ -16,13 +16,13 @@
 #ifndef ALIENSURFACE_H
 #define ALIENSURFACE_H
 
-#include <QtCompositor/QWaylandSurfaceInterface>
+#include "lipsticksurfaceinterface.h"
 
 #include "qwayland-server-alien-manager.h"
 
 class AlienClient;
 
-class AlienSurface : public QObject, public QWaylandSurfaceInterface, public QtWaylandServer::alien_surface
+class AlienSurface : public LipstickSurfaceInterface, public QtWaylandServer::alien_surface
 {
     Q_OBJECT
 public:

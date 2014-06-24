@@ -150,9 +150,9 @@ void SailfishSurface::updateStates()
 
 
 SailfishWindow::SailfishWindow(SailfishSurface *surface, uint32_t id)
-              : QtWaylandServer::sailfish_window(static_cast<wl_client*>(surface->surface()->client()), id)
+              : LipstickSurfaceInterface(surface->surface())
+              , QtWaylandServer::sailfish_window(static_cast<wl_client*>(surface->surface()->client()), id)
               , m_surface(surface)
-              , m_cover(Q_NULLPTR)
               , m_deleting(false)
 {
     LipstickCompositor *compositor = LipstickCompositor::instance();
@@ -173,18 +173,9 @@ QWaylandSurface *SailfishWindow::surface() const
     return m_surface->surface();
 }
 
-QWaylandSurface *SailfishWindow::cover() const
+bool SailfishWindow::runOperation(QWaylandSurfaceOp *)
 {
-    return m_cover->surface();
-}
-
-void SailfishWindow::setCover(SailfishSurface *surf)
-{
-    if (m_cover == surf)
-        return;
-
-    m_cover = surf;
-    emit coverChanged();
+    return false;
 }
 
 void SailfishWindow::sailfish_window_destroy_resource(Resource *)
@@ -199,14 +190,14 @@ void SailfishWindow::sailfish_window_set_title(Resource *resource, const QString
 {
     Q_UNUSED(resource)
     Q_UNUSED(title)
-    m_surface->setSurfaceTitle(title);
+    setSurfaceTitle(title);
 }
 
 void SailfishWindow::sailfish_window_set_app_id(Resource *resource, const QString &app_id)
 {
     Q_UNUSED(resource)
     Q_UNUSED(app_id)
-    m_surface->setSurfaceClassName(app_id);
+    setSurfaceClassName(app_id);
 }
 
 void SailfishWindow::sailfish_window_set_transform_mask(Resource *resource, uint32_t transform)
@@ -215,18 +206,37 @@ void SailfishWindow::sailfish_window_set_transform_mask(Resource *resource, uint
     Q_UNUSED(transform)
 }
 
-void SailfishWindow::sailfish_window_set_cover_surface(Resource *resource, ::wl_resource *cover)
+class SailfishCover : public LipstickCoverSurfaceInterface
+{
+public:
+    SailfishCover(SailfishSurface *s) : LipstickCoverSurfaceInterface(s->surface()) {}
+protected:
+    bool runOperation(QWaylandSurfaceOp *) Q_DECL_OVERRIDE { return false; }
+};
+
+void SailfishWindow::sailfish_window_set_cover_surface(Resource *resource, ::wl_resource *res)
 {
     Q_UNUSED(resource)
 
-    SailfishSurface *surface = cover ? SailfishSurface::fromResource(cover) : Q_NULLPTR;
-    if (m_cover == surface)
+    SailfishSurface *surface = res ? SailfishSurface::fromResource(res) : Q_NULLPTR;
+    QWaylandSurface *wlsurf = res ? surface->surface() : Q_NULLPTR;
+    if (cover() == wlsurf)
         return;
 
-    setCover(surface);
+    if (cover()) {
+        foreach (QWaylandSurfaceInterface *iface, cover()->interfaces()) {
+            if (dynamic_cast<SailfishCover *>(iface)) {
+                delete iface;
+                break;
+            }
+        }
+    }
+
+    setCover(wlsurf);
     if (!surface || surface == m_surface)
         return;
 
     surface->m_window = this;
     surface->sendConfigure(0, 0); //can we use some more meaningful size here?
+    new SailfishCover(surface);
 }

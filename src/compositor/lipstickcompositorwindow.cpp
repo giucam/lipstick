@@ -22,8 +22,7 @@
 #include "lipstickcompositor.h"
 #include "lipstickcompositorwindow.h"
 #include "windowproperty.h"
-
-#include "sailfishshell/sailfishsurface.h"
+#include "lipsticksurfaceinterface.h"
 
 LipstickCompositorWindow::LipstickCompositorWindow(int windowId, const QString &category,
                                                    QWaylandQuickSurface *surface, QQuickItem *parent)
@@ -71,11 +70,9 @@ int LipstickCompositorWindow::coverId() const
 {
     LipstickCompositorWindow *that = const_cast<LipstickCompositorWindow *>(this);
     foreach (QWaylandSurfaceInterface *iface, surface()->interfaces()) {
-        if (SailfishSurface *ss = dynamic_cast<SailfishSurface *>(iface)) {
-            if (!ss->window())
-                continue;
-            connect(ss->window(), &SailfishWindow::coverChanged, that, &LipstickCompositorWindow::coverIdChanged);
-            QWaylandSurface *cover = ss->window()->cover();
+        if (LipstickSurfaceInterface *ss = dynamic_cast<LipstickSurfaceInterface *>(iface)) {
+            connect(ss, &LipstickSurfaceInterface::coverChanged, that, &LipstickCompositorWindow::coverIdChanged);
+            QWaylandSurface *cover = ss->cover();
             if (!cover) {
                 return 0;
             }
@@ -124,9 +121,8 @@ QString LipstickCompositorWindow::category() const
     }
 
     foreach (QWaylandSurfaceInterface *iface, surface()->interfaces()) {
-        if (SailfishSurface *ss = dynamic_cast<SailfishSurface *>(iface)) {
-            if (ss->window() && ss->window()->surface() != surface())
-                return "cover";
+        if (dynamic_cast<LipstickCoverSurfaceInterface *>(iface)) {
+            return "cover";
         }
     }
     return m_category;
