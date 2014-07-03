@@ -72,6 +72,9 @@ bool AlienSurface::runOperation(QWaylandSurfaceOp *op)
             sendConfigure(s.width(), s.height());
             return true;
         }
+        case LipstickOOmScoreOp::Type:
+            m_client->send_oom_score(static_cast<LipstickOOmScoreOp *>(op)->score());
+            return true;
         default:
             break;
     }

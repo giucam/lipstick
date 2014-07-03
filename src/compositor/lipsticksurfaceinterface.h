@@ -43,4 +43,16 @@ public:
 
 };
 
+class LIPSTICK_EXPORT LipstickOOmScoreOp : public QWaylandSurfaceOp
+{
+public:
+    enum { Type = QWaylandSurfaceOp::UserType + 1 };
+    LipstickOOmScoreOp(int score);
+
+    int score() const { return m_score; }
+
+private:
+    int m_score;
+};
+
 #endif

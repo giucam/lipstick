@@ -41,3 +41,11 @@ LipstickCoverSurfaceInterface::LipstickCoverSurfaceInterface(QWaylandSurface *su
                              : QWaylandSurfaceInterface(surface)
 {
 }
+
+
+
+LipstickOOmScoreOp::LipstickOOmScoreOp(int score)
+                  : QWaylandSurfaceOp((QWaylandSurfaceOp::Type)Type)
+                  , m_score(score)
+{
+}
